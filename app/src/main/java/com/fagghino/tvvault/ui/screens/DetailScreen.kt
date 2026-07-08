@@ -393,11 +393,11 @@ fun DetailScreen(
                                                 if (previousUnwatchedSeasons.isNotEmpty()) {
                                                     showPreviousSeasonsDialog = season
                                                 } else {
-                                                    viewModel.setSeasonWatched(mediaId, season.seasonNumber, true)
+                                                    viewModel.setEpisodesWatched(seasonEpIds.toList(), true, mediaId)
                                                 }
                                             } else {
                                                 // Unmarking season
-                                                viewModel.setSeasonWatched(mediaId, season.seasonNumber, false)
+                                                viewModel.setEpisodesWatched(seasonEpIds.toList(), false, mediaId)
                                             }
                                         },
                                         colors = ButtonDefaults.buttonColors(
@@ -610,7 +610,8 @@ fun DetailScreen(
                     dismissButton = {
                         TextButton(
                             onClick = {
-                                viewModel.setSeasonWatched(mediaId, s.seasonNumber, true)
+                                val sEpIds = allEpisodes.filter { it.seasonNumber == s.seasonNumber }.map { it.localId }
+                                viewModel.setEpisodesWatched(sEpIds, true, mediaId)
                                 showPreviousSeasonsDialog = null
                             }
                         ) {

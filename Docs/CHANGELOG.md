@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added Swipe-to-Dismiss on episodes (`DetailScreen`): swipe right to mark watched, swipe left to mark unwatched.
 - Added automatic previous episode/season confirmation dialogs when marking non-consecutive episodes or seasons as watched.
 - Added a top-bar three-dots action menu in `DetailScreen` for global status changes and deletion.
+- Unified bulk updates for seasons and episodes using a single entry point method in `DetailScreen`.
+
+### Fixed
+- Excluded soft-deleted media items from `getGlobalWatchedEpisodesCount` to prevent statistics inconsistency after deleting a show.
 
 ### Changed
 - Restructured bottom navigation bar to map: Libreria (Library), Uscite (Upcoming), Cerca (Search), Profilo (Profile).

@@ -181,7 +181,12 @@ interface UserEpisodeStateDao {
     """)
     suspend fun getWatchedEpisodesCountForMedia(mediaItemLocalId: Long): Int
 
-    @Query("SELECT COUNT(*) FROM user_episode_states WHERE watched = 1 AND deleted = 0")
+    @Query("""
+        SELECT COUNT(u.localId) FROM user_episode_states u
+        INNER JOIN episodes e ON u.episodeLocalId = e.localId
+        INNER JOIN media_items m ON e.mediaItemLocalId = m.localId
+        WHERE u.watched = 1 AND u.deleted = 0 AND e.deleted = 0 AND m.deleted = 0
+    """)
     fun getGlobalWatchedEpisodesCount(): Flow<Int>
 
     @Query("SELECT * FROM user_episode_states")
