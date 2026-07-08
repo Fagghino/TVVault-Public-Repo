@@ -399,40 +399,38 @@ class FirestoreSyncEngine(
         val userRoot = firestore.collection("users").document(uid)
         
         try {
-            // 1. MediaItems
-            val mediaItems = mediaItemDao.getAll()
-            for (item in mediaItems) {
-                userRoot.collection("mediaItems").document(item.remoteId).set(item, SetOptions.merge()).await()
+            val allOps = mutableListOf<Pair<com.google.firebase.firestore.DocumentReference, Any>>()
+
+            mediaItemDao.getAll().filter { it.remoteId.isNotBlank() }.forEach { item ->
+                allOps.add(userRoot.collection("mediaItems").document(item.remoteId) to item)
             }
             
-            // 2. UserMediaStates
-            val mediaStates = userMediaStateDao.getAll()
-            for (state in mediaStates) {
-                userRoot.collection("userMediaStates").document(state.remoteId).set(state, SetOptions.merge()).await()
+            userMediaStateDao.getAll().filter { it.remoteId.isNotBlank() }.forEach { state ->
+                allOps.add(userRoot.collection("userMediaStates").document(state.remoteId) to state)
             }
             
-            // 3. Seasons
-            val seasons = seasonDao.getAll()
-            for (season in seasons) {
-                userRoot.collection("seasons").document(season.remoteId).set(season, SetOptions.merge()).await()
+            seasonDao.getAll().filter { it.remoteId.isNotBlank() }.forEach { season ->
+                allOps.add(userRoot.collection("seasons").document(season.remoteId) to season)
             }
             
-            // 4. Episodes
-            val episodes = episodeDao.getAll()
-            for (ep in episodes) {
-                userRoot.collection("episodes").document(ep.remoteId).set(ep, SetOptions.merge()).await()
+            episodeDao.getAll().filter { it.remoteId.isNotBlank() }.forEach { ep ->
+                allOps.add(userRoot.collection("episodes").document(ep.remoteId) to ep)
             }
             
-            // 5. UserEpisodeStates
-            val epStates = userEpisodeStateDao.getAll()
-            for (state in epStates) {
-                userRoot.collection("userEpisodeStates").document(state.remoteId).set(state, SetOptions.merge()).await()
+            userEpisodeStateDao.getAll().filter { it.remoteId.isNotBlank() }.forEach { state ->
+                allOps.add(userRoot.collection("userEpisodeStates").document(state.remoteId) to state)
             }
             
-            // 6. WatchEvents
-            val events = watchEventDao.getAll()
-            for (event in events) {
-                userRoot.collection("watchEvents").document(event.remoteId).set(event, SetOptions.merge()).await()
+            watchEventDao.getAll().filter { it.remoteId.isNotBlank() }.forEach { event ->
+                allOps.add(userRoot.collection("watchEvents").document(event.remoteId) to event)
+            }
+
+            allOps.chunked(450).forEach { chunk ->
+                val batch = firestore.batch()
+                chunk.forEach { (ref, data) ->
+                    batch.set(ref, data, SetOptions.merge())
+                }
+                batch.commit().await()
             }
             
             appSettingDao.insert(AppSetting(migrationKey, "true"))
@@ -688,20 +686,24 @@ class FirestoreSyncEngine(
             val allOperations = mutableListOf<suspend (WriteBatch) -> Unit>()
             
             userEpisodeStates.forEach { state ->
-                allOperations.add { batch ->
-                    val docRef = userRoot.collection("userEpisodeStates").document(state.remoteId)
-                    batch.set(docRef, state, SetOptions.merge())
+                if (state.remoteId.isNotBlank()) {
+                    allOperations.add { batch ->
+                        val docRef = userRoot.collection("userEpisodeStates").document(state.remoteId)
+                        batch.set(docRef, state, SetOptions.merge())
+                    }
                 }
             }
             
             watchEvents.forEach { event ->
-                allOperations.add { batch ->
-                    val docRef = userRoot.collection("watchEvents").document(event.remoteId)
-                    batch.set(docRef, event, SetOptions.merge())
+                if (event.remoteId.isNotBlank()) {
+                    allOperations.add { batch ->
+                        val docRef = userRoot.collection("watchEvents").document(event.remoteId)
+                        batch.set(docRef, event, SetOptions.merge())
+                    }
                 }
             }
             
-            if (userMediaState != null) {
+            if (userMediaState != null && userMediaState.remoteId.isNotBlank()) {
                 allOperations.add { batch ->
                     val docRef = userRoot.collection("userMediaStates").document(userMediaState.remoteId)
                     batch.set(docRef, userMediaState, SetOptions.merge())
@@ -721,6 +723,7 @@ class FirestoreSyncEngine(
     }
 
     suspend fun pushMediaItem(item: MediaItem) {
+        if (item.remoteId.isBlank()) return
         try {
             val uid = auth.currentUser?.uid ?: return
             firestore.collection("users").document(uid).collection("mediaItems").document(item.remoteId)
@@ -732,6 +735,7 @@ class FirestoreSyncEngine(
     }
 
     suspend fun pushUserMediaState(state: UserMediaState) {
+        if (state.remoteId.isBlank()) return
         try {
             val uid = auth.currentUser?.uid ?: return
             firestore.collection("users").document(uid).collection("userMediaStates").document(state.remoteId)
@@ -743,6 +747,7 @@ class FirestoreSyncEngine(
     }
 
     suspend fun pushSeason(season: Season) {
+        if (season.remoteId.isBlank()) return
         try {
             val uid = auth.currentUser?.uid ?: return
             firestore.collection("users").document(uid).collection("seasons").document(season.remoteId)
@@ -754,6 +759,7 @@ class FirestoreSyncEngine(
     }
 
     suspend fun pushEpisode(episode: Episode) {
+        if (episode.remoteId.isBlank()) return
         try {
             val uid = auth.currentUser?.uid ?: return
             firestore.collection("users").document(uid).collection("episodes").document(episode.remoteId)
@@ -765,6 +771,7 @@ class FirestoreSyncEngine(
     }
 
     suspend fun pushUserEpisodeState(state: UserEpisodeState) {
+        if (state.remoteId.isBlank()) return
         try {
             val uid = auth.currentUser?.uid ?: return
             firestore.collection("users").document(uid).collection("userEpisodeStates").document(state.remoteId)
@@ -776,6 +783,7 @@ class FirestoreSyncEngine(
     }
 
     suspend fun pushWatchEvent(event: WatchEvent) {
+        if (event.remoteId.isBlank()) return
         try {
             val uid = auth.currentUser?.uid ?: return
             firestore.collection("users").document(uid).collection("watchEvents").document(event.remoteId)

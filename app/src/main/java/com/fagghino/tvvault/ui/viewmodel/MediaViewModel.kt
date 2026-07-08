@@ -15,6 +15,9 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.ConcurrentHashMap
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -225,37 +228,47 @@ class MediaViewModel(
     }
 
     // User interactions
+    private val mediaMutexes = ConcurrentHashMap<Long, Mutex>()
+    private fun getMutex(mediaId: Long) = mediaMutexes.getOrPut(mediaId) { Mutex() }
+
     fun toggleFavorite(mediaId: Long, isFavorite: Boolean) {
         viewModelScope.launch {
-            val currentState = repository.observeMediaState(mediaId).first()
-            val newState = currentState?.copy(favorite = isFavorite, updatedAt = System.currentTimeMillis())
-                ?: UserMediaState(mediaItemLocalId = mediaId, personalStatus = "watchlist", favorite = isFavorite)
-            repository.updateMediaState(newState)
+            getMutex(mediaId).withLock {
+                val currentState = repository.observeMediaState(mediaId).first()
+                val newState = currentState?.copy(favorite = isFavorite, updatedAt = System.currentTimeMillis())
+                    ?: UserMediaState(mediaItemLocalId = mediaId, personalStatus = "watchlist", favorite = isFavorite)
+                repository.updateMediaState(newState)
+            }
         }
     }
 
     fun updateStatus(mediaId: Long, status: String) {
         viewModelScope.launch {
-            val currentState = repository.observeMediaState(mediaId).first()
-            val newState = currentState?.copy(
-                personalStatus = status,
-                updatedAt = System.currentTimeMillis(),
-                completedAt = if (status == "completed") System.currentTimeMillis() else null,
-                startedAt = if (status == "watching" && currentState.startedAt == null) System.currentTimeMillis() else currentState.startedAt
-            ) ?: UserMediaState(mediaItemLocalId = mediaId, personalStatus = status)
-            repository.updateMediaState(newState)
+            getMutex(mediaId).withLock {
+                val currentState = repository.observeMediaState(mediaId).first()
+                val currentStartedAt = currentState?.startedAt
+                val newState = currentState?.copy(
+                    personalStatus = status,
+                    updatedAt = System.currentTimeMillis(),
+                    completedAt = if (status == "completed") System.currentTimeMillis() else null,
+                    startedAt = if (status == "watching" && currentStartedAt == null) System.currentTimeMillis() else currentStartedAt
+                ) ?: UserMediaState(mediaItemLocalId = mediaId, personalStatus = status)
+                repository.updateMediaState(newState)
+            }
         }
     }
 
     fun updateRatingAndNotes(mediaId: Long, rating: Float?, notes: String?) {
         viewModelScope.launch {
-            val currentState = repository.observeMediaState(mediaId).first()
-            val newState = currentState?.copy(
-                rating = rating,
-                notes = notes,
-                updatedAt = System.currentTimeMillis()
-            ) ?: UserMediaState(mediaItemLocalId = mediaId, personalStatus = "watchlist", rating = rating, notes = notes)
-            repository.updateMediaState(newState)
+            getMutex(mediaId).withLock {
+                val currentState = repository.observeMediaState(mediaId).first()
+                val newState = currentState?.copy(
+                    rating = rating,
+                    notes = notes,
+                    updatedAt = System.currentTimeMillis()
+                ) ?: UserMediaState(mediaItemLocalId = mediaId, personalStatus = "watchlist", rating = rating, notes = notes)
+                repository.updateMediaState(newState)
+            }
         }
     }
 

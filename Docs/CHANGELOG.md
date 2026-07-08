@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.5] - 2026-07-08
+
+### Changed
+- Reworked `checkAndRunFirestoreMigration` in `FirestoreSyncEngine` to gather operations and push them in batches of 450 using `WriteBatch`, drastically reducing API calls and improving speed.
+- Isolated state mutations (`toggleFavorite`, `updateStatus`, `updateRatingAndNotes`) in `MediaViewModel` per media item using `ConcurrentHashMap<Long, Mutex>` to prevent read-modify-write race conditions.
+
+### Fixed
+- Fixed an `Invalid document reference` crash in `FirestoreSyncEngine` by ensuring `remoteId.isNotBlank()` before adding items to batch or individual push operations.
+- Fixed a potential `NullPointerException` in `updateStatus` when evaluating `startedAt` on a `null` initial state.
+
+## [0.8.4] - 2026-07-08
+
+### Changed
+- Refactored `loadUpcomingEpisodes` in `MediaViewModel` to leverage a single reactive database JOIN query (`observeShowsWithState`).
+- Optimized `addMediaToLibrary` in `MediaRepository` by replacing in-memory `.size` lists with `COUNT` queries to prevent memory bottlenecks.
+- Optimized TMDb network requests in `loadUpcomingEpisodes` by implementing a `Semaphore` concurrency limit (max 10) to safely parallelize fetches without triggering 429 errors.
+
+### Fixed
+- Fixed a semantic inconsistency by clearing `completedAt` to `null` in `MediaRepository` (`setEpisodeWatched`, `setSeasonWatched`) and `MediaViewModel` (`updateStatus`) when a show loses its 'completed' status.
+
 ## [0.8.3] - 2026-07-08
 
 ### Added
