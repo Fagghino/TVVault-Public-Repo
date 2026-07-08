@@ -1,0 +1,65 @@
+# Gradle / Build Outputs
+.gradle/
+**/build/
+build/
+*.apk
+*.aar
+*.aab
+*.ap_
+*.der
+gradle-app.setting
+.gradletasknamecache
+
+# Local configuration files (contains local SDK paths, API keys, etc.)
+local.properties
+secrets.properties
+
+# Android Studio / IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+.navigation/
+
+# Log files
+*.log
+
+# Keystores, signing keys, and secrets
+*.jks
+*.keystore
+*.pk8
+*.pem
+google-services.json
+crashlytics-ndk.properties
+
+# Device/Emulator/OS generated files
+captures/
+.DS_Store
+Thumbs.db
+*.hprof
+
+# Caching and Native (NDK) builds
+.externalNativeBuild/
+.cxx/
+.kotlin/
+ndkBuild/
+
+# Lint and Testing reports
+lint/reports/
+lint/intermediates/
+/target/
+
+# Docs (As specified: ignore all doc contents except CHANGELOG)
+Docs/*
+!CHANGELOG.md
+
+# VS Code
+.vscode/
+
+# Archives
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z

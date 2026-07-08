@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TVVault</string>
+    <string name="title_shows">Serie TV</string>
+    <string name="title_movies">Film</string>
+    <string name="title_profile">Profilo</string>
+
+    <!-- Shows Screen -->
+    <string name="search_placeholder_shows">Cerca serie TV online o in libreria&#8230;</string>
+    <string name="online_results">Risultati online per \"%1$s\"</string>
+    <string name="no_online_results">Nessun risultato online trovato</string>
+    <string name="empty_shows_library">Nessuna serie TV in libreria. Inizia a cercarne una online!</string>
+    <string name="cancel">Cancella</string>
+    <string name="add">Aggiungi</string>
+    <string name="all_filter">Tutte</string>
+    <string name="watching_filter">In Visione</string>
+    <string name="completed_filter">Terminate</string>
+    <string name="dropped_filter">Interrotte</string>
+    <string name="not_started_filter">Non iniziate</string>
+    <string name="visti">Visti: %1$d / %2$d</string>
+    <string name="watching_status">In Visione</string>
+    <string name="completed_status">Terminata</string>
+    <string name="watchlist_status">Non iniziata</string>
+    <string name="paused_status">In Pausa</string>
+    <string name="dropped_status">Interrotta</string>
+
+    <!-- Movies Screen -->
+    <string name="search_placeholder_movies">Cerca film online o in libreria&#8230;</string>
+    <string name="no_movies_results">Nessun film online trovato</string>
+    <string name="empty_movies_library">Nessun film in libreria. Inizia a cercarne uno online!</string>
+    <string name="to_watch_filter">Da vedere</string>
+    <string name="watched_filter">Visti</string>
+    <string name="seen_badge">Visto</string>
+    <string name="to_watch_badge">Da vedere</string>
+    <string name="untracked_badge">Non tracciato</string>
+
+    <!-- Detail Screen -->
+    <string name="personal_rating">Valutazione Personale</string>
+    <string name="notes_label">Note Personali&#8230;</string>
+    <string name="save_notes">Salva Informazioni</string>
+    <string name="mark_all_season">Segna intera stagione come vista</string>
+    <string name="mark_none_season">Segna intera stagione come non vista</string>
+    <string name="added_to_favorites">Aggiunto ai preferiti</string>
+    <string name="removed_from_favorites">Rimosso dai preferiti</string>
+    <string name="info_saved">Informazioni salvate con successo</string>
+
+    <!-- Profile Screen -->
+    <string name="tagline">Il tuo archivio TV personale</string>
+    <string name="stats_title">Le tue Statistiche</string>
+    <string name="stat_in_progress">In Corso</string>
+    <string name="stat_episodes">Episodi Visti</string>
+    <string name="stat_movies">Film Visti</string>
+    <string name="action_import">Importa Dati TV Time</string>
+    <string name="action_import_desc">Carica i file CSV esportati da TV Time</string>
+    <string name="action_export_json">Esporta Backup JSON</string>
+    <string name="action_export_json_desc">Genera un backup completo in formato JSON</string>
+    <string name="action_export_zip">Esporta Backup CSV ZIP</string>
+    <string name="action_export_zip_desc">Genera un archivio ZIP contenente le tabelle in formato CSV</string>
+    <string name="action_restore">Ripristina Backup JSON</string>
+    <string name="action_restore_desc">Ripristina il tuo intero archivio personale</string>
+    <string name="action_about">Informazioni (Credits)</string>
+    <string name="action_about_desc">TMDb API, TVVault v1.0.0</string>
+
+    <!-- Import & Reconciliation -->
+    <string name="import_title">Importazioni TV Time</string>
+    <string name="import_desc">Seleziona il file followed_tv_show.csv dall\'esportazione di TV Time per importare la tua libreria personale.</string>
+    <string name="select_csv">Seleziona File CSV</string>
+    <string name="sessions_history">Cronologia Sessioni</string>
+    <string name="no_sessions">Nessuna sessione di importazione registrata</string>
+    <string name="status_running">In corso</string>
+    <string name="status_reconcile">Risolvi Corrispondenze</string>
+    <string name="status_completed">Completato</string>
+    <string name="status_failed">Fallito</string>
+    <string name="reconcile_desc">Alcuni titoli presentano ambiguità online. Risolvili manualmente per completare l\'inserimento.</string>
+    <string name="total_rows">Righe totali</string>
+    <string name="matched_rows">Accoppiati</string>
+    <string name="ambiguous_rows">Ambigui</string>
+    <string name="unmatched_rows">Non trovati</string>
+    <string name="reconcile_title">Riconciliazione Titoli</string>
+    <string name="reconcile_subtitle">Abbiamo trovato più riscontri online per i seguenti titoli. Seleziona quello corretto per ciascuno.</string>
+    <string name="all_resolved">Tutte le corrispondenze sono state risolte!</string>
+    <string name="go_to_history">Torna alla cronologia</string>
+    <string name="tv_time_export">Esportato da TV Time: \"%1$s\"</string>
+    <string name="select_tmdb_match">Seleziona la corrispondenza corretta su TMDb:</string>
+    <string name="year_label">Anno: %1$s</string>
+    <string name="accept_btn">Accetta</string>
+    <string name="discard_title">Scarta questo titolo / Nessuno</string>
+</resources>

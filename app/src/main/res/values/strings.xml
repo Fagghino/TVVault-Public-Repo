@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TVVault</string>
+    <string name="title_shows">Shows</string>
+    <string name="title_movies">Movies</string>
+    <string name="title_profile">Profile</string>
+
+    <!-- Shows Screen -->
+    <string name="search_placeholder_shows">Search TV shows online or in library&#8230;</string>
+    <string name="online_results">Online results for &quot;%1$s&quot;</string>
+    <string name="no_online_results">No online results found</string>
+    <string name="empty_shows_library">No TV shows in library. Start searching online!</string>
+    <string name="cancel">Cancel</string>
+    <string name="add">Add</string>
+    <string name="all_filter">All</string>
+    <string name="watching_filter">In Visione</string>
+    <string name="completed_filter">Terminate</string>
+    <string name="dropped_filter">Interrotte</string>
+    <string name="not_started_filter">Non iniziate</string>
+    <string name="visti">Watched: %1$d / %2$d</string>
+    <string name="watching_status">In Visione</string>
+    <string name="completed_status">Terminata</string>
+    <string name="watchlist_status">Non iniziata</string>
+    <string name="paused_status">In Pausa</string>
+    <string name="dropped_status">Interrotta</string>
+
+    <!-- Movies Screen -->
+    <string name="search_placeholder_movies">Search movies online or in library&#8230;</string>
+    <string name="no_movies_results">No online movies found</string>
+    <string name="empty_movies_library">No movies in library. Start searching online!</string>
+    <string name="to_watch_filter">To Watch</string>
+    <string name="watched_filter">Watched</string>
+    <string name="seen_badge">Seen</string>
+    <string name="to_watch_badge">To Watch</string>
+    <string name="untracked_badge">Untracked</string>
+
+    <!-- Detail Screen -->
+    <string name="personal_rating">Personal Rating</string>
+    <string name="notes_label">Personal Notes&#8230;</string>
+    <string name="save_notes">Save Info</string>
+    <string name="mark_all_season">Mark entire season as seen</string>
+    <string name="mark_none_season">Mark entire season as unseen</string>
+    <string name="added_to_favorites">Added to favorites</string>
+    <string name="removed_from_favorites">Removed from favorites</string>
+    <string name="info_saved">Information saved successfully</string>
+
+    <!-- Profile Screen -->
+    <string name="tagline">Your personal TV archive</string>
+    <string name="stats_title">Your Statistics</string>
+    <string name="stat_in_progress">In Progress</string>
+    <string name="stat_episodes">Episodes Watched</string>
+    <string name="stat_movies">Movies Watched</string>
+    <string name="action_import">Import TV Time Data</string>
+    <string name="action_import_desc">Load CSV files exported from TV Time</string>
+    <string name="action_export_json">Export JSON Backup</string>
+    <string name="action_export_json_desc">Generate a complete backup in JSON format</string>
+    <string name="action_export_zip">Export CSV ZIP Backup</string>
+    <string name="action_export_zip_desc">Generate a ZIP file containing tables in CSV format</string>
+    <string name="action_restore">Restore JSON Backup</string>
+    <string name="action_restore_desc">Restore your entire personal archive</string>
+    <string name="action_about">Information (Credits)</string>
+    <string name="action_about_desc">TMDb API, TVVault v1.0.0</string>
+
+    <!-- Import & Reconciliation -->
+    <string name="import_title">TV Time Imports</string>
+    <string name="import_desc">Select the followed_tv_show.csv file from TV Time export to import your personal library.</string>
+    <string name="select_csv">Select CSV File</string>
+    <string name="sessions_history">Sessions History</string>
+    <string name="no_sessions">No import sessions registered</string>
+    <string name="status_running">In Progress</string>
+    <string name="status_reconcile">Resolve Matches</string>
+    <string name="status_completed">Completed</string>
+    <string name="status_failed">Failed</string>
+    <string name="reconcile_desc">Some titles have online ambiguities. Resolve them manually to complete the import.</string>
+    <string name="total_rows">Total Rows</string>
+    <string name="matched_rows">Matched</string>
+    <string name="ambiguous_rows">Ambiguous</string>
+    <string name="unmatched_rows">Not Found</string>
+    <string name="reconcile_title">Title Reconciliation</string>
+    <string name="reconcile_subtitle">We found multiple matches online. Select the correct one for each title.</string>
+    <string name="all_resolved">All matches have been resolved!</string>
+    <string name="go_to_history">Go to history</string>
+    <string name="tv_time_export">Exported from TV Time: &quot;%1$s&quot;</string>
+    <string name="select_tmdb_match">Select the correct match on TMDb:</string>
+    <string name="year_label">Year: %1$s</string>
+    <string name="accept_btn">Accept</string>
+    <string name="discard_title">Discard this title / None</string>
+</resources>
