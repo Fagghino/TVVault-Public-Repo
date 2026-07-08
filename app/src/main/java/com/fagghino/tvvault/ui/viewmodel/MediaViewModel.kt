@@ -33,11 +33,8 @@ class MediaViewModel(
 
     // Joined shows+state for grouped display
     val showsWithState: StateFlow<List<Pair<MediaItem, UserMediaState?>>> =
-        repository.observeShows().map { shows ->
-            shows.map { show ->
-                val state = repository.observeMediaState(show.localId).first()
-                show to state
-            }
+        repository.observeShowsWithState().map { list ->
+            list.map { it.mediaItem to it.userMediaState }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private fun formatMinutes(minutes: Int): String {
@@ -266,9 +263,7 @@ class MediaViewModel(
 
     fun setSeasonWatched(mediaId: Long, seasonNumber: Int, watched: Boolean) {
         viewModelScope.launch {
-            repository.observeEpisodes(mediaId, seasonNumber).first().forEach { episode ->
-                repository.setEpisodeWatched(episode.localId, watched, mediaId)
-            }
+            repository.setSeasonWatched(mediaId, seasonNumber, watched)
         }
     }
 

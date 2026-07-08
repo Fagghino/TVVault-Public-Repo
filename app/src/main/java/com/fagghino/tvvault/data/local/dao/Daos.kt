@@ -29,6 +29,10 @@ interface MediaItemDao {
     @Query("SELECT * FROM media_items")
     suspend fun getAll(): List<MediaItem>
 
+    @Transaction
+    @Query("SELECT * FROM media_items WHERE mediaType = :mediaType AND deleted = 0")
+    fun getMediaItemsWithState(mediaType: String): Flow<List<MediaItemWithState>>
+
     @Query("""
         DELETE FROM media_items 
         WHERE localId NOT IN (SELECT mediaItemLocalId FROM user_media_states)
@@ -110,8 +114,17 @@ interface EpisodeDao {
     @Query("SELECT * FROM episodes WHERE mediaItemLocalId = :mediaItemLocalId AND seasonNumber = :seasonNumber AND deleted = 0 ORDER BY episodeNumber ASC")
     fun getEpisodesForSeason(mediaItemLocalId: Long, seasonNumber: Int): Flow<List<Episode>>
 
+    @Query("SELECT * FROM episodes WHERE mediaItemLocalId = :mediaItemLocalId AND seasonNumber = :seasonNumber AND deleted = 0 ORDER BY episodeNumber ASC")
+    suspend fun getEpisodesForSeasonDirect(mediaItemLocalId: Long, seasonNumber: Int): List<Episode>
+
     @Query("SELECT * FROM episodes WHERE mediaItemLocalId = :mediaItemLocalId AND deleted = 0 ORDER BY seasonNumber ASC, episodeNumber ASC")
     fun getAllEpisodesForMedia(mediaItemLocalId: Long): Flow<List<Episode>>
+
+    @Query("SELECT * FROM episodes WHERE mediaItemLocalId = :mediaItemLocalId AND deleted = 0 ORDER BY seasonNumber ASC, episodeNumber ASC")
+    suspend fun getAllEpisodesForMediaDirect(mediaItemLocalId: Long): List<Episode>
+
+    @Query("SELECT COUNT(*) FROM episodes WHERE mediaItemLocalId = :mediaItemLocalId AND deleted = 0")
+    suspend fun getEpisodesCountForMedia(mediaItemLocalId: Long): Int
 
     @Query("SELECT * FROM episodes WHERE mediaItemLocalId = :mediaItemLocalId AND seasonNumber = :seasonNumber AND episodeNumber = :episodeNumber")
     suspend fun getEpisodeByNumber(mediaItemLocalId: Long, seasonNumber: Int, episodeNumber: Int): Episode?
@@ -134,6 +147,9 @@ interface UserEpisodeStateDao {
     @Query("SELECT * FROM user_episode_states WHERE remoteId = :remoteId")
     suspend fun getStateByRemoteId(remoteId: String): UserEpisodeState?
 
+    @Query("SELECT * FROM user_episode_states WHERE episodeLocalId IN (:episodeIds)")
+    suspend fun getStatesByEpisodeIds(episodeIds: List<Long>): List<UserEpisodeState>
+
     @Query("""
         SELECT u.* FROM user_episode_states u 
         INNER JOIN episodes e ON u.episodeLocalId = e.localId 
@@ -141,11 +157,67 @@ interface UserEpisodeStateDao {
     """)
     fun getWatchedEpisodesForMedia(mediaItemLocalId: Long): Flow<List<UserEpisodeState>>
 
+    @Query("""
+        SELECT u.* FROM user_episode_states u 
+        INNER JOIN episodes e ON u.episodeLocalId = e.localId 
+        WHERE e.mediaItemLocalId = :mediaItemLocalId AND u.watched = 1 AND u.deleted = 0 AND e.deleted = 0
+    """)
+    suspend fun getWatchedEpisodesForMediaDirect(mediaItemLocalId: Long): List<UserEpisodeState>
+
+    @Query("""
+        SELECT COUNT(u.localId) FROM user_episode_states u 
+        INNER JOIN episodes e ON u.episodeLocalId = e.localId 
+        WHERE e.mediaItemLocalId = :mediaItemLocalId AND u.watched = 1 AND u.deleted = 0 AND e.deleted = 0
+    """)
+    suspend fun getWatchedEpisodesCountForMedia(mediaItemLocalId: Long): Int
+
     @Query("SELECT COUNT(*) FROM user_episode_states WHERE watched = 1 AND deleted = 0")
     fun getGlobalWatchedEpisodesCount(): Flow<Int>
 
     @Query("SELECT * FROM user_episode_states")
     suspend fun getAll(): List<UserEpisodeState>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertOrUpdateAll(states: List<UserEpisodeState>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertWatchEvents(events: List<WatchEvent>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertWatchEvent(event: WatchEvent)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertOrUpdateMediaState(state: UserMediaState)
+
+    @Transaction
+    suspend fun updateSeasonWatchedTransaction(
+        states: List<UserEpisodeState>,
+        events: List<WatchEvent>,
+        mediaState: UserMediaState?
+    ) {
+        insertOrUpdateAll(states)
+        if (events.isNotEmpty()) {
+            insertWatchEvents(events)
+        }
+        if (mediaState != null) {
+            insertOrUpdateMediaState(mediaState)
+        }
+    }
+
+    @Transaction
+    suspend fun updateEpisodeWatchedTransaction(
+        state: UserEpisodeState,
+        event: WatchEvent?,
+        mediaState: UserMediaState?
+    ) {
+        insertOrUpdate(state)
+        if (event != null) {
+            insertWatchEvent(event)
+        }
+        if (mediaState != null) {
+            insertOrUpdateMediaState(mediaState)
+        }
+    }
 }
 
 @Dao

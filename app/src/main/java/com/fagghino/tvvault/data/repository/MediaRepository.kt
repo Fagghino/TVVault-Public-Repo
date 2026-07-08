@@ -10,6 +10,12 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import android.util.Log
 import java.lang.Exception
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 
 class MediaRepository(
     private val mediaItemDao: MediaItemDao,
@@ -24,6 +30,8 @@ class MediaRepository(
     private val tmdbService: TmdbService,
     private val syncEngine: FirestoreSyncEngine
 ) {
+    private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     // Getter DAOs for TvTimeImporter
     fun getImportJobDao(): ImportJobDao = importJobDao
     fun getImportMatchCandidateDao(): ImportMatchCandidateDao = importMatchCandidateDao
@@ -31,6 +39,7 @@ class MediaRepository(
     // Shows and Movies getters
     fun observeShows(): Flow<List<MediaItem>> = mediaItemDao.getByMediaType("tv")
     fun observeMovies(): Flow<List<MediaItem>> = mediaItemDao.getByMediaType("movie")
+    fun observeShowsWithState(): Flow<List<MediaItemWithState>> = mediaItemDao.getMediaItemsWithState("tv")
 
     // State observers
     fun observeMediaState(mediaId: Long): Flow<UserMediaState?> = userMediaStateDao.observeByMediaId(mediaId)
@@ -46,7 +55,9 @@ class MediaRepository(
     // CRUD Ops
     suspend fun saveMediaItem(mediaItem: MediaItem): Long {
         val id = mediaItemDao.insert(mediaItem)
-        mediaItemDao.getById(id)?.let { syncEngine.pushMediaItem(it) }
+        repositoryScope.launch {
+            mediaItemDao.getById(id)?.let { syncEngine.pushMediaItem(it) }
+        }
         return id
     }
 
@@ -56,7 +67,9 @@ class MediaRepository(
             mediaItemRemoteId = parentItem?.remoteId ?: state.mediaItemRemoteId
         )
         val id = userMediaStateDao.insertOrUpdate(updatedState)
-        userMediaStateDao.getByMediaId(updatedState.mediaItemLocalId)?.let { syncEngine.pushUserMediaState(it) }
+        repositoryScope.launch {
+            userMediaStateDao.getByMediaId(updatedState.mediaItemLocalId)?.let { syncEngine.pushUserMediaState(it) }
+        }
         return id
     }
 
@@ -81,7 +94,9 @@ class MediaRepository(
             mediaItemRemoteId = parentItem?.remoteId ?: season.mediaItemRemoteId
         )
         val id = seasonDao.insert(updatedSeason)
-        seasonDao.getSeasonByNumber(updatedSeason.mediaItemLocalId, updatedSeason.seasonNumber)?.let { syncEngine.pushSeason(it) }
+        repositoryScope.launch {
+            seasonDao.getSeasonByNumber(updatedSeason.mediaItemLocalId, updatedSeason.seasonNumber)?.let { syncEngine.pushSeason(it) }
+        }
         return id
     }
     
@@ -92,8 +107,10 @@ class MediaRepository(
             ep.copy(mediaItemRemoteId = parentItem?.remoteId ?: ep.mediaItemRemoteId)
         }
         episodeDao.insertAll(updatedEpisodes)
-        updatedEpisodes.forEach { ep ->
-            syncEngine.pushEpisode(ep)
+        repositoryScope.launch {
+            updatedEpisodes.forEach { ep ->
+                syncEngine.pushEpisode(ep)
+            }
         }
     }
 
@@ -166,7 +183,9 @@ class MediaRepository(
             existing.localId
         } else {
             val newId = mediaItemDao.insert(item)
-            mediaItemDao.getById(newId)?.let { syncEngine.pushMediaItem(it) }
+            repositoryScope.launch {
+                mediaItemDao.getById(newId)?.let { syncEngine.pushMediaItem(it) }
+            }
             newId
         }
         
@@ -178,7 +197,9 @@ class MediaRepository(
                 personalStatus = "watchlist" // Always "Non iniziata" until user starts watching
             )
             userMediaStateDao.insertOrUpdate(newState)
-            syncEngine.pushUserMediaState(newState)
+            repositoryScope.launch {
+                syncEngine.pushUserMediaState(newState)
+            }
         }
 
         if (item.mediaType == "tv") {
@@ -199,7 +220,9 @@ class MediaRepository(
                             episodeCount = seasonDto.episodes.size
                         )
                         seasonDao.insert(season)
-                        seasonDao.getSeasonByNumber(localId, seasonNum)?.let { syncEngine.pushSeason(it) }
+                        repositoryScope.launch {
+                            seasonDao.getSeasonByNumber(localId, seasonNum)?.let { syncEngine.pushSeason(it) }
+                        }
                         
                         val episodes = seasonDto.episodes.map { ep ->
                             Episode(
@@ -212,7 +235,9 @@ class MediaRepository(
                             )
                         }
                         episodeDao.insertAll(episodes)
-                        episodes.forEach { syncEngine.pushEpisode(it) }
+                        repositoryScope.launch {
+                            episodes.forEach { syncEngine.pushEpisode(it) }
+                        }
                     }
                 }
                 
@@ -229,7 +254,9 @@ class MediaRepository(
                             updatedAt = System.currentTimeMillis()
                         )
                         userMediaStateDao.insertOrUpdate(updatedState)
-                        syncEngine.pushUserMediaState(updatedState)
+                        repositoryScope.launch {
+                            syncEngine.pushUserMediaState(updatedState)
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -240,7 +267,9 @@ class MediaRepository(
                 val details = tmdbService.getMovieDetails(item.providerId.toInt())
                 val toInsert = item.copy(localId = localId, runtime = details.runtime)
                 mediaItemDao.insert(toInsert)
-                syncEngine.pushMediaItem(toInsert)
+                repositoryScope.launch {
+                    syncEngine.pushMediaItem(toInsert)
+                }
             } catch (e: Exception) {
                 // Fail silently
             }
@@ -313,11 +342,22 @@ class MediaRepository(
     }
 
     // Episode state operations
-    suspend fun setEpisodeWatched(episodeId: Long, watched: Boolean, mediaItemId: Long) {
-        val parentEpisode = episodeDao.getById(episodeId)
-        val parentMedia = mediaItemDao.getById(mediaItemId)
+    suspend fun setEpisodeWatched(episodeId: Long, watched: Boolean, mediaItemId: Long) = coroutineScope {
+        val parentEpisodeDeferred = async { episodeDao.getById(episodeId) }
+        val parentMediaDeferred = async { mediaItemDao.getById(mediaItemId) }
+        val currentStateDeferred = async { userEpisodeStateDao.getByEpisodeId(episodeId) }
+        val totalEpsDeferred = async { episodeDao.getEpisodesCountForMedia(mediaItemId) }
+        val watchedCountDeferred = async { userEpisodeStateDao.getWatchedEpisodesCountForMedia(mediaItemId) }
+        val currentMediaStateDeferred = async { userMediaStateDao.getByMediaId(mediaItemId) }
 
-        val stateToSave = userEpisodeStateDao.getByEpisodeId(episodeId)?.copy(
+        val parentEpisode = parentEpisodeDeferred.await()
+        val parentMedia = parentMediaDeferred.await()
+        val currentState = currentStateDeferred.await()
+        val totalEps = totalEpsDeferred.await()
+        val currentWatchedCount = watchedCountDeferred.await()
+        val currentMediaState = currentMediaStateDeferred.await()
+
+        val stateToSave = currentState?.copy(
             watched = watched,
             watchedAt = if (watched) System.currentTimeMillis() else null,
             episodeRemoteId = parentEpisode?.remoteId ?: "",
@@ -329,12 +369,10 @@ class MediaRepository(
             watchedAt = if (watched) System.currentTimeMillis() else null,
             updatedAt = System.currentTimeMillis()
         )
-        userEpisodeStateDao.insertOrUpdate(stateToSave)
-        userEpisodeStateDao.getByEpisodeId(episodeId)?.let { syncEngine.pushUserEpisodeState(it) }
 
         // Log watch event
-        if (watched) {
-            val event = WatchEvent(
+        val event = if (watched) {
+            WatchEvent(
                 mediaItemLocalId = mediaItemId,
                 mediaItemRemoteId = parentMedia?.remoteId ?: "",
                 episodeLocalId = episodeId,
@@ -342,36 +380,153 @@ class MediaRepository(
                 watchedAt = System.currentTimeMillis(),
                 eventType = "watch"
             )
-            watchEventDao.insert(event)
-            syncEngine.pushWatchEvent(event)
-        }
+        } else null
 
-        // Recalculate watch progress to update show status
-        val allEpisodesList = episodeDao.getAllEpisodesForMedia(mediaItemId).first()
-        val totalEps = allEpisodesList.size
-        
+        var updatedMediaState: UserMediaState? = null
         if (totalEps > 0) {
-            val watchedEpsList = userEpisodeStateDao.getWatchedEpisodesForMedia(mediaItemId).first()
-            val watchedCount = watchedEpsList.size
+            val wasWatchedBefore = currentState?.watched ?: false
+            val watchedCount = if (watched && !wasWatchedBefore) {
+                currentWatchedCount + 1
+            } else if (!watched && wasWatchedBefore) {
+                currentWatchedCount - 1
+            } else {
+                currentWatchedCount
+            }
             
-            val currentMediaState = userMediaStateDao.observeByMediaId(mediaItemId).first()
             if (currentMediaState != null) {
                 val newStatus = when {
                     watchedCount == totalEps -> "completed"
                     watchedCount > 0 -> "watching"
-                    else -> "watchlist" // If 0 episodes watched, mark it as watchlist / not started
+                    else -> "watchlist"
                 }
                 if (newStatus != currentMediaState.personalStatus) {
-                    val updatedState = currentMediaState.copy(
+                    updatedMediaState = currentMediaState.copy(
                         personalStatus = newStatus,
                         mediaItemRemoteId = parentMedia?.remoteId ?: currentMediaState.mediaItemRemoteId,
                         updatedAt = System.currentTimeMillis(),
                         completedAt = if (newStatus == "completed") System.currentTimeMillis() else currentMediaState.completedAt
                     )
-                    userMediaStateDao.insertOrUpdate(updatedState)
-                    syncEngine.pushUserMediaState(updatedState)
                 }
             }
+        }
+
+        // Run Room updates in a transaction
+        userEpisodeStateDao.updateEpisodeWatchedTransaction(stateToSave, event, updatedMediaState)
+
+        // Sync in background (optimistic UI) using stateToSave directly
+        repositoryScope.launch {
+            syncEngine.pushUserEpisodeState(stateToSave)
+            if (event != null) {
+                syncEngine.pushWatchEvent(event)
+            }
+            if (updatedMediaState != null) {
+                syncEngine.pushUserMediaState(updatedMediaState)
+            }
+        }
+    }
+
+    suspend fun setSeasonWatched(mediaItemId: Long, seasonNumber: Int, watched: Boolean) = coroutineScope {
+        val episodesDeferred = async { episodeDao.getEpisodesForSeasonDirect(mediaItemId, seasonNumber) }
+        val parentMediaDeferred = async { mediaItemDao.getById(mediaItemId) }
+
+        val episodes = episodesDeferred.await()
+        if (episodes.isEmpty()) return@coroutineScope
+
+        val parentMedia = parentMediaDeferred.await()
+        val currentTime = System.currentTimeMillis()
+
+        // Fetch current states for all episodes in this season in one query!
+        val episodeIds = episodes.map { it.localId }
+        val currentStates = userEpisodeStateDao.getStatesByEpisodeIds(episodeIds).associateBy { it.episodeLocalId }
+
+        val epStatesToSave = mutableListOf<UserEpisodeState>()
+        val eventsToSave = mutableListOf<WatchEvent>()
+
+        episodes.forEach { episode ->
+            val currentState = currentStates[episode.localId]
+            if (currentState == null || currentState.watched != watched) {
+                val stateToSave = currentState?.copy(
+                    watched = watched,
+                    watchedAt = if (watched) currentTime else null,
+                    episodeRemoteId = episode.remoteId,
+                    updatedAt = currentTime
+                ) ?: UserEpisodeState(
+                    episodeLocalId = episode.localId,
+                    episodeRemoteId = episode.remoteId,
+                    watched = watched,
+                    watchedAt = if (watched) currentTime else null,
+                    updatedAt = currentTime
+                )
+                epStatesToSave.add(stateToSave)
+
+                if (watched) {
+                    eventsToSave.add(
+                        WatchEvent(
+                            mediaItemLocalId = mediaItemId,
+                            mediaItemRemoteId = parentMedia?.remoteId ?: "",
+                            episodeLocalId = episode.localId,
+                            episodeRemoteId = episode.remoteId,
+                            watchedAt = currentTime,
+                            eventType = "watch"
+                        )
+                    )
+                }
+            }
+        }
+
+        // If no changes are needed, we can just return
+        if (epStatesToSave.isEmpty()) return@coroutineScope
+
+        // Fetch total episodes count and current watched count in parallel
+        val totalEpsDeferred = async { episodeDao.getEpisodesCountForMedia(mediaItemId) }
+        val watchedCountDeferred = async { userEpisodeStateDao.getWatchedEpisodesCountForMedia(mediaItemId) }
+        val currentMediaStateDeferred = async { userMediaStateDao.getByMediaId(mediaItemId) }
+
+        val totalEps = totalEpsDeferred.await()
+        val currentWatchedCount = watchedCountDeferred.await()
+        val currentMediaState = currentMediaStateDeferred.await()
+
+        var updatedMediaState: UserMediaState? = null
+        if (totalEps > 0) {
+            // Count how many we are actually changing from unwatched to watched or vice-versa
+            var diff = 0
+            epStatesToSave.forEach { state ->
+                val wasWatched = currentStates[state.episodeLocalId]?.watched ?: false
+                if (state.watched && !wasWatched) {
+                    diff++
+                } else if (!state.watched && wasWatched) {
+                    diff--
+                }
+            }
+            val watchedCount = currentWatchedCount + diff
+
+            if (currentMediaState != null) {
+                val newStatus = when {
+                    watchedCount == totalEps -> "completed"
+                    watchedCount > 0 -> "watching"
+                    else -> "watchlist"
+                }
+                if (newStatus != currentMediaState.personalStatus) {
+                    updatedMediaState = currentMediaState.copy(
+                        personalStatus = newStatus,
+                        mediaItemRemoteId = parentMedia?.remoteId ?: currentMediaState.mediaItemRemoteId,
+                        updatedAt = System.currentTimeMillis(),
+                        completedAt = if (newStatus == "completed") System.currentTimeMillis() else currentMediaState.completedAt
+                    )
+                }
+            }
+        }
+
+        // Run Room updates in a transaction
+        userEpisodeStateDao.updateSeasonWatchedTransaction(epStatesToSave, eventsToSave, updatedMediaState)
+
+        // Sync in background (optimistic UI) using pushBatch
+        repositoryScope.launch {
+            syncEngine.pushBatch(
+                userEpisodeStates = epStatesToSave,
+                watchEvents = eventsToSave,
+                userMediaState = updatedMediaState
+            )
         }
     }
 

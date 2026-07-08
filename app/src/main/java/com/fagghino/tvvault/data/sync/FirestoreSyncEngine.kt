@@ -7,6 +7,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.SetOptions
+import com.google.firebase.firestore.WriteBatch
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -64,6 +65,7 @@ class FirestoreSyncEngine(
             scope.launch {
                 try {
                     for (change in snapshot.documentChanges) {
+                        if (change.document.metadata.hasPendingWrites()) continue
                         val remoteItem = change.document.toObject(MediaItem::class.java)
                         
                         // Registra la mappatura localId -> remoteId per risolvere i legacy orfani
@@ -94,6 +96,7 @@ class FirestoreSyncEngine(
             scope.launch {
                 try {
                     for (change in snapshot.documentChanges) {
+                        if (change.document.metadata.hasPendingWrites()) continue
                         val remoteState = change.document.toObject(UserMediaState::class.java)
                         
                         var remoteIdParent = remoteState.mediaItemRemoteId
@@ -142,6 +145,7 @@ class FirestoreSyncEngine(
             scope.launch {
                 try {
                     for (change in snapshot.documentChanges) {
+                        if (change.document.metadata.hasPendingWrites()) continue
                         val remoteSeason = change.document.toObject(Season::class.java)
 
                         var remoteIdParent = remoteSeason.mediaItemRemoteId
@@ -190,6 +194,7 @@ class FirestoreSyncEngine(
             scope.launch {
                 try {
                     for (change in snapshot.documentChanges) {
+                        if (change.document.metadata.hasPendingWrites()) continue
                         val remoteEpisode = change.document.toObject(Episode::class.java)
 
                         // Registra la mappatura localId -> remoteId per risolvere i legacy orfani di Episode
@@ -247,6 +252,7 @@ class FirestoreSyncEngine(
             scope.launch {
                 try {
                     for (change in snapshot.documentChanges) {
+                        if (change.document.metadata.hasPendingWrites()) continue
                         val remoteState = change.document.toObject(UserEpisodeState::class.java)
 
                         var remoteIdParent = remoteState.episodeRemoteId
@@ -295,6 +301,7 @@ class FirestoreSyncEngine(
             scope.launch {
                 try {
                     for (change in snapshot.documentChanges) {
+                        if (change.document.metadata.hasPendingWrites()) continue
                         val remoteEvent = change.document.toObject(WatchEvent::class.java)
 
                         var remoteIdParentMedia = remoteEvent.mediaItemRemoteId
@@ -667,6 +674,50 @@ class FirestoreSyncEngine(
         listeners.forEach { it.remove() }
         listeners.clear()
         Log.d("FirestoreSyncEngine", "Stopped all listeners")
+    }
+
+    suspend fun pushBatch(
+        userEpisodeStates: List<UserEpisodeState> = emptyList(),
+        watchEvents: List<WatchEvent> = emptyList(),
+        userMediaState: UserMediaState? = null
+    ) {
+        try {
+            val uid = auth.currentUser?.uid ?: return
+            val userRoot = firestore.collection("users").document(uid)
+            
+            val allOperations = mutableListOf<suspend (WriteBatch) -> Unit>()
+            
+            userEpisodeStates.forEach { state ->
+                allOperations.add { batch ->
+                    val docRef = userRoot.collection("userEpisodeStates").document(state.remoteId)
+                    batch.set(docRef, state, SetOptions.merge())
+                }
+            }
+            
+            watchEvents.forEach { event ->
+                allOperations.add { batch ->
+                    val docRef = userRoot.collection("watchEvents").document(event.remoteId)
+                    batch.set(docRef, event, SetOptions.merge())
+                }
+            }
+            
+            if (userMediaState != null) {
+                allOperations.add { batch ->
+                    val docRef = userRoot.collection("userMediaStates").document(userMediaState.remoteId)
+                    batch.set(docRef, userMediaState, SetOptions.merge())
+                }
+            }
+            
+            if (allOperations.isEmpty()) return
+            
+            allOperations.chunked(450).forEach { chunk ->
+                val batch = firestore.batch()
+                chunk.forEach { op -> op(batch) }
+                batch.commit().await()
+            }
+        } catch (e: Exception) {
+            Log.e("FirestoreSyncEngine", "Error in pushBatch: ${e.message}", e)
+        }
     }
 
     suspend fun pushMediaItem(item: MediaItem) {

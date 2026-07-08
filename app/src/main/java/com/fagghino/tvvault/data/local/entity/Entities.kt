@@ -240,3 +240,12 @@ data class AppSetting(
     @PrimaryKey val key: String,
     val value: String
 )
+
+data class MediaItemWithState(
+    @androidx.room.Embedded val mediaItem: MediaItem,
+    @androidx.room.Relation(
+        parentColumn = "localId",
+        entityColumn = "mediaItemLocalId"
+    )
+    val userMediaState: UserMediaState?
+)
