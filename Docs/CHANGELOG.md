@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Restructured bottom navigation bar to map: Libreria (Library), Uscite (Upcoming), Cerca (Search), Profilo (Profile).
 - Removed TMDb online search logic from local `ShowsScreen` and `MoviesScreen`.
 - Shows in the library list now dynamically display their next unwatched episode (e.g., "Prossimo: S1E3") or status.
+- Removed the old personal status dropdown selector from the `DetailScreen` layout.
 
 ## [0.8.5] - 2026-07-08
 
