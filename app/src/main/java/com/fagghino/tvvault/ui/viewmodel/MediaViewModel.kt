@@ -284,6 +284,22 @@ class MediaViewModel(
         }
     }
 
+    suspend fun getNextEpisodeToWatch(mediaId: Long): Episode? {
+        return repository.getNextEpisodeToWatch(mediaId)
+    }
+
+    fun setEpisodesWatched(episodeIds: List<Long>, watched: Boolean, mediaItemId: Long) {
+        viewModelScope.launch {
+            repository.setEpisodesWatched(episodeIds, watched, mediaItemId)
+        }
+    }
+
+    fun removeMediaItem(mediaId: Long) {
+        viewModelScope.launch {
+            repository.removeMediaItem(mediaId)
+        }
+    }
+
     // ─── Upcoming Episodes ───────────────────────────────────────────────
     private val _upcomingEpisodes = MutableStateFlow<List<UpcomingEpisodeItem>>(emptyList())
     val upcomingEpisodes: StateFlow<List<UpcomingEpisodeItem>> = _upcomingEpisodes.asStateFlow()
@@ -310,7 +326,7 @@ class MediaViewModel(
                     if (status == "watching" || status == "watchlist") {
                         val tmdbId = showWithState.mediaItem.providerId.toIntOrNull() ?: return@mapNotNull null
                         
-                        kotlinx.coroutines.async {
+                        async {
                             semaphore.withPermit {
                                 val episodesForShow = mutableListOf<UpcomingEpisodeItem>()
                                 try {

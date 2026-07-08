@@ -531,6 +531,114 @@ class MediaRepository(
         }
     }
 
+    suspend fun getNextEpisodeToWatch(mediaId: Long): Episode? {
+        return episodeDao.getNextEpisodeToWatch(mediaId)
+    }
+
+    suspend fun setEpisodesWatched(episodeIds: List<Long>, watched: Boolean, mediaItemId: Long) = coroutineScope {
+        if (episodeIds.isEmpty()) return@coroutineScope
+        
+        val episodes = episodeIds.mapNotNull { episodeDao.getById(it) }
+        val parentMedia = mediaItemDao.getById(mediaItemId)
+        val currentTime = System.currentTimeMillis()
+        
+        val currentStates = userEpisodeStateDao.getStatesByEpisodeIds(episodeIds).associateBy { it.episodeLocalId }
+        
+        val epStatesToSave = mutableListOf<UserEpisodeState>()
+        val eventsToSave = mutableListOf<WatchEvent>()
+        
+        episodes.forEach { episode ->
+            val currentState = currentStates[episode.localId]
+            if (currentState == null || currentState.watched != watched) {
+                val stateToSave = currentState?.copy(
+                    watched = watched,
+                    watchedAt = if (watched) currentTime else null,
+                    episodeRemoteId = episode.remoteId,
+                    updatedAt = currentTime
+                ) ?: UserEpisodeState(
+                    episodeLocalId = episode.localId,
+                    episodeRemoteId = episode.remoteId,
+                    watched = watched,
+                    watchedAt = if (watched) currentTime else null,
+                    updatedAt = currentTime
+                )
+                epStatesToSave.add(stateToSave)
+                
+                if (watched) {
+                    eventsToSave.add(
+                        WatchEvent(
+                            mediaItemLocalId = mediaItemId,
+                            mediaItemRemoteId = parentMedia?.remoteId ?: "",
+                            episodeLocalId = episode.localId,
+                            episodeRemoteId = episode.remoteId,
+                            watchedAt = currentTime,
+                            eventType = "watch"
+                        )
+                    )
+                }
+            }
+        }
+        
+        if (epStatesToSave.isEmpty()) return@coroutineScope
+        
+        // Calculate new status for the media item
+        val totalEps = episodeDao.getEpisodesCountForMedia(mediaItemId)
+        val currentWatchedCount = userEpisodeStateDao.getWatchedEpisodesCountForMedia(mediaItemId)
+        val currentMediaState = userMediaStateDao.getByMediaId(mediaItemId)
+        
+        // Calculate difference in watched count
+        val changedCount = epStatesToSave.count { it.watched } - epStatesToSave.count { !it.watched && currentStates[it.episodeLocalId]?.watched == true }
+        val newWatchedCount = (currentWatchedCount + changedCount).coerceIn(0, totalEps)
+        
+        var updatedMediaState: UserMediaState? = null
+        if (totalEps > 0 && currentMediaState != null) {
+            val newStatus = when {
+                newWatchedCount == totalEps -> "completed"
+                newWatchedCount > 0 -> "watching"
+                else -> "watchlist"
+            }
+            if (newStatus != currentMediaState.personalStatus) {
+                updatedMediaState = currentMediaState.copy(
+                    personalStatus = newStatus,
+                    mediaItemRemoteId = parentMedia?.remoteId ?: currentMediaState.mediaItemRemoteId,
+                    updatedAt = currentTime,
+                    completedAt = if (newStatus == "completed") currentTime else null
+                )
+            }
+        }
+        
+        userEpisodeStateDao.updateSeasonWatchedTransaction(epStatesToSave, eventsToSave, updatedMediaState)
+        
+        repositoryScope.launch {
+            syncEngine.pushBatch(epStatesToSave, eventsToSave, updatedMediaState)
+        }
+    }
+
+    suspend fun removeMediaItem(mediaId: Long) {
+        val item = mediaItemDao.getById(mediaId) ?: return
+        val updatedItem = item.copy(deleted = true, updatedAt = System.currentTimeMillis())
+        mediaItemDao.insert(updatedItem)
+        
+        val state = userMediaStateDao.getByMediaId(mediaId)
+        if (state != null) {
+            val updatedState = state.copy(
+                deleted = true, 
+                personalStatus = "", 
+                watchlist = false, 
+                favorite = false, 
+                updatedAt = System.currentTimeMillis()
+            )
+            userMediaStateDao.insertOrUpdate(updatedState)
+            repositoryScope.launch {
+                syncEngine.pushUserMediaState(updatedState)
+            }
+        }
+        
+        repositoryScope.launch {
+            syncEngine.pushMediaItem(updatedItem)
+        }
+    }
+
     suspend fun cleanupSpace() {
         mediaItemDao.deleteUnusedMedia()
     }

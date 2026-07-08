@@ -134,6 +134,16 @@ interface EpisodeDao {
 
     @Query("SELECT * FROM episodes")
     suspend fun getAll(): List<Episode>
+
+    @Query("""
+        SELECT * FROM episodes 
+        WHERE mediaItemLocalId = :mediaId AND deleted = 0 AND localId NOT IN (
+            SELECT episodeLocalId FROM user_episode_states WHERE watched = 1 AND deleted = 0
+        ) 
+        ORDER BY seasonNumber ASC, episodeNumber ASC 
+        LIMIT 1
+    """)
+    suspend fun getNextEpisodeToWatch(mediaId: Long): Episode?
 }
 
 @Dao

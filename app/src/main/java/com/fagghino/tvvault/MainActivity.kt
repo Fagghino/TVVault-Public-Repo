@@ -28,6 +28,9 @@ import com.fagghino.tvvault.ui.screens.ProfileScreen
 import com.fagghino.tvvault.ui.screens.ReconciliationScreen
 import com.fagghino.tvvault.ui.screens.SettingsScreen
 import com.fagghino.tvvault.ui.screens.ShowsScreen
+import com.fagghino.tvvault.ui.screens.LibraryScreen
+import com.fagghino.tvvault.ui.screens.SearchScreen
+import com.fagghino.tvvault.ui.screens.UpcomingScreen
 import com.fagghino.tvvault.ui.theme.TVVaultTheme
 
 class MainActivity : ComponentActivity() {
@@ -62,21 +65,20 @@ fun MainScreen(viewModel: MediaViewModel) {
 
     // Determine which tab is logically active (detail/* belongs to the tab it came from)
     val activeTab = when {
-        currentRoute == "shows" -> "shows"
-        currentRoute == "movies" -> "movies"
+        currentRoute == "library" -> "library"
+        currentRoute == "upcoming" -> "upcoming"
+        currentRoute == "search" -> "search"
         currentRoute == "profile" -> "profile"
         currentRoute?.startsWith("detail/") == true -> {
             // Look back in the stack to find parent tab
-            navController.previousBackStackEntry?.destination?.route ?: "shows"
+            navController.previousBackStackEntry?.destination?.route ?: "library"
         }
-        else -> "shows"
+        else -> "library"
     }
 
     fun navigateToTab(tab: String) {
         if (currentRoute == tab) return // already at root of this tab, nothing to do
         navController.navigate(tab) {
-            // Pop everything up to (but not including) the start destination,
-            // then pop start destination itself only if switching tabs
             popUpTo(navController.graph.findStartDestination().id) {
                 saveState = true
                 inclusive = false
@@ -94,10 +96,10 @@ fun MainScreen(viewModel: MediaViewModel) {
                 tonalElevation = 0.dp
             ) {
                 NavigationBarItem(
-                    selected = activeTab == "shows",
-                    onClick = { navigateToTab("shows") },
-                    icon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
-                    label = { Text(stringResource(R.string.title_shows), style = MaterialTheme.typography.labelSmall) },
+                    selected = activeTab == "library",
+                    onClick = { navigateToTab("library") },
+                    icon = { Icon(Icons.Default.List, contentDescription = null) },
+                    label = { Text("Libreria", style = MaterialTheme.typography.labelSmall) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = MaterialTheme.colorScheme.primary,
                         unselectedIconColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
@@ -105,10 +107,21 @@ fun MainScreen(viewModel: MediaViewModel) {
                     )
                 )
                 NavigationBarItem(
-                    selected = activeTab == "movies",
-                    onClick = { navigateToTab("movies") },
-                    icon = { Icon(Icons.Default.Star, contentDescription = null) },
-                    label = { Text(stringResource(R.string.title_movies), style = MaterialTheme.typography.labelSmall) },
+                    selected = activeTab == "upcoming",
+                    onClick = { navigateToTab("upcoming") },
+                    icon = { Icon(Icons.Default.DateRange, contentDescription = null) },
+                    label = { Text("Uscite", style = MaterialTheme.typography.labelSmall) },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                        unselectedIconColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                        indicatorColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                )
+                NavigationBarItem(
+                    selected = activeTab == "search",
+                    onClick = { navigateToTab("search") },
+                    icon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    label = { Text("Cerca", style = MaterialTheme.typography.labelSmall) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = MaterialTheme.colorScheme.primary,
                         unselectedIconColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
@@ -119,7 +132,7 @@ fun MainScreen(viewModel: MediaViewModel) {
                     selected = activeTab == "profile",
                     onClick = { navigateToTab("profile") },
                     icon = { Icon(Icons.Default.Person, contentDescription = null) },
-                    label = { Text(stringResource(R.string.title_profile), style = MaterialTheme.typography.labelSmall) },
+                    label = { Text("Profilo", style = MaterialTheme.typography.labelSmall) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = MaterialTheme.colorScheme.primary,
                         unselectedIconColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
@@ -131,14 +144,28 @@ fun MainScreen(viewModel: MediaViewModel) {
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = "shows",
+            startDestination = "library",
             modifier = Modifier.padding(innerPadding)
         ) {
-            composable("shows") {
-                ShowsScreen(viewModel = viewModel, onShowClick = { showId -> navController.navigate("detail/$showId") })
+            composable("library") {
+                LibraryScreen(
+                    viewModel = viewModel,
+                    onShowClick = { showId -> navController.navigate("detail/$showId") },
+                    onMovieClick = { movieId -> navController.navigate("detail/$movieId") }
+                )
             }
-            composable("movies") {
-                MoviesScreen(viewModel = viewModel, onMovieClick = { movieId -> navController.navigate("detail/$movieId") })
+            composable("upcoming") {
+                UpcomingScreen(
+                    viewModel = viewModel,
+                    onShowClick = { showId -> navController.navigate("detail/$showId") }
+                )
+            }
+            composable("search") {
+                SearchScreen(
+                    viewModel = viewModel,
+                    onShowClick = { showId -> navController.navigate("detail/$showId") },
+                    onMovieClick = { movieId -> navController.navigate("detail/$movieId") }
+                )
             }
             composable("profile") {
                 ProfileScreen(

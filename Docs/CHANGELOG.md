@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.6] - 2026-07-08
+
+### Added
+- Created `LibraryScreen` as a unified view containing both local Shows and Movies with a premium statistics header showing counts and hours spent.
+- Created `SearchScreen` as a dedicated online discovery page for TMDb search, moving search interactions away from local library lists.
+- Added `EpisodeDao.getNextEpisodeToWatch` and `MediaRepository.getNextEpisodeToWatch` to quickly find the first unwatched episode of a series.
+- Added bulk episode state updates with transactional savings and show status recalculation via `MediaRepository.setEpisodesWatched`.
+- Added soft-deletion for shows and movies via `MediaRepository.removeMediaItem`.
+- Added Swipe-to-Dismiss on episodes (`DetailScreen`): swipe right to mark watched, swipe left to mark unwatched.
+- Added automatic previous episode/season confirmation dialogs when marking non-consecutive episodes or seasons as watched.
+- Added a top-bar three-dots action menu in `DetailScreen` for global status changes and deletion.
+
+### Changed
+- Restructured bottom navigation bar to map: Libreria (Library), Uscite (Upcoming), Cerca (Search), Profilo (Profile).
+- Removed TMDb online search logic from local `ShowsScreen` and `MoviesScreen`.
+- Shows in the library list now dynamically display their next unwatched episode (e.g., "Prossimo: S1E3") or status.
+
 ## [0.8.5] - 2026-07-08
 
 ### Changed

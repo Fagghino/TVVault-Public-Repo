@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,6 +29,8 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.fagghino.tvvault.R
 import com.fagghino.tvvault.data.local.entity.MediaItem
+import com.fagghino.tvvault.data.local.entity.Episode
+import com.fagghino.tvvault.data.local.entity.Season
 import com.fagghino.tvvault.ui.viewmodel.MediaViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -58,6 +61,10 @@ fun DetailScreen(
     val userState by viewModel.observeMediaState(mediaId).collectAsState(initial = null)
     val seasons by viewModel.observeSeasons(mediaId).collectAsState(initial = emptyList())
     val watchedEpisodes by viewModel.observeWatchedEpisodes(mediaId).collectAsState(initial = emptyList())
+    val allEpisodes by viewModel.observeAllEpisodes(mediaId).collectAsState(initial = emptyList())
+
+    var showPreviousEpisodesDialog by remember { mutableStateOf<Episode?>(null) }
+    var showPreviousSeasonsDialog by remember { mutableStateOf<Season?>(null) }
 
     val state = userState
     var notesText by remember { mutableStateOf("") }
@@ -93,6 +100,48 @@ fun DetailScreen(
                             contentDescription = "Favorite",
                             tint = if (isFav) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                         )
+                    }
+
+                    var menuExpanded by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { menuExpanded = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "Menu")
+                        }
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Sposta in 'In Corso'") },
+                                onClick = {
+                                    viewModel.updateStatus(mediaId, "watching")
+                                    menuExpanded = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Sposta in 'Da Vedere'") },
+                                onClick = {
+                                    viewModel.updateStatus(mediaId, "watchlist")
+                                    menuExpanded = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Sposta in 'Abbandonato'") },
+                                onClick = {
+                                    viewModel.updateStatus(mediaId, "dropped")
+                                    menuExpanded = false
+                                }
+                            )
+                            Divider()
+                            DropdownMenuItem(
+                                text = { Text("Rimuovi dalla libreria", color = MaterialTheme.colorScheme.error) },
+                                onClick = {
+                                    viewModel.removeMediaItem(mediaId)
+                                    menuExpanded = false
+                                    onBackClick()
+                                }
+                            )
+                        }
                     }
                 }
             )
@@ -330,7 +379,26 @@ fun DetailScreen(
                                 trailingContent = {
                                     Button(
                                         onClick = {
-                                            viewModel.setSeasonWatched(mediaId, season.seasonNumber, !allWatched)
+                                            if (!allWatched) {
+                                                // Marking season as watched, check previous seasons
+                                                val sortedSeasons = seasons.sortedBy { it.seasonNumber }
+                                                val clickedSeasonIndex = sortedSeasons.indexOfFirst { it.seasonNumber == season.seasonNumber }
+                                                val previousUnwatchedSeasons = if (clickedSeasonIndex > 0) {
+                                                    sortedSeasons.subList(0, clickedSeasonIndex).filter { prevSeason ->
+                                                        val prevSeasonEpIds = allEpisodes.filter { it.seasonNumber == prevSeason.seasonNumber }.map { it.localId }
+                                                        prevSeasonEpIds.isNotEmpty() && !prevSeasonEpIds.all { it in watchedEpIds }
+                                                    }
+                                                } else emptyList()
+
+                                                if (previousUnwatchedSeasons.isNotEmpty()) {
+                                                    showPreviousSeasonsDialog = season
+                                                } else {
+                                                    viewModel.setSeasonWatched(mediaId, season.seasonNumber, true)
+                                                }
+                                            } else {
+                                                // Unmarking season
+                                                viewModel.setSeasonWatched(mediaId, season.seasonNumber, false)
+                                            }
                                         },
                                         colors = ButtonDefaults.buttonColors(
                                             containerColor = if (allWatched) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.primary
@@ -351,37 +419,205 @@ fun DetailScreen(
 
                             if (isExpanded) {
                                 Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.05f))
-                                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                                Column(modifier = Modifier.padding(vertical = 4.dp)) {
                                     episodesList.forEach { episode ->
                                         val isEpWatched = episode.localId in watchedEpIds
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clickable {
-                                                    viewModel.setEpisodeWatched(episode.localId, !isEpWatched, mediaId)
+                                        
+                                        val dismissState = rememberSwipeToDismissBoxState(
+                                            confirmValueChange = { value ->
+                                                if (value == SwipeToDismissBoxValue.StartToEnd) {
+                                                    // Swipe right -> mark watched
+                                                    if (!isEpWatched) {
+                                                        val sortedEps = allEpisodes.sortedWith(compareBy({ it.seasonNumber }, { it.episodeNumber }))
+                                                        val clickedIndex = sortedEps.indexOfFirst { it.localId == episode.localId }
+                                                        val previousUnwatched = if (clickedIndex > 0) {
+                                                            sortedEps.subList(0, clickedIndex).filter { it.localId !in watchedEpIds }
+                                                        } else emptyList()
+
+                                                        if (previousUnwatched.isNotEmpty()) {
+                                                            showPreviousEpisodesDialog = episode
+                                                        } else {
+                                                            viewModel.setEpisodeWatched(episode.localId, true, mediaId)
+                                                        }
+                                                    }
+                                                    false
+                                                } else if (value == SwipeToDismissBoxValue.EndToStart) {
+                                                    // Swipe left -> mark unwatched
+                                                    if (isEpWatched) {
+                                                        viewModel.setEpisodeWatched(episode.localId, false, mediaId)
+                                                    }
+                                                    false
+                                                } else {
+                                                    false
                                                 }
-                                                .padding(vertical = 8.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.SpaceBetween
-                                        ) {
-                                            Text(
-                                                text = "Ep. ${episode.episodeNumber} - ${episode.name}",
-                                                fontSize = 14.sp,
-                                                modifier = Modifier.weight(1f)
-                                            )
-                                            Checkbox(
-                                                checked = isEpWatched,
-                                                onCheckedChange = { checked ->
-                                                    viewModel.setEpisodeWatched(episode.localId, checked, mediaId)
+                                            }
+                                        )
+
+                                        SwipeToDismissBox(
+                                            state = dismissState,
+                                            backgroundContent = {
+                                                val color = when (dismissState.dismissDirection) {
+                                                    SwipeToDismissBoxValue.StartToEnd -> MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                                                    SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.error.copy(alpha = 0.2f)
+                                                    else -> Color.Transparent
                                                 }
-                                            )
-                                        }
+                                                val align = when (dismissState.dismissDirection) {
+                                                    SwipeToDismissBoxValue.StartToEnd -> Alignment.CenterStart
+                                                    SwipeToDismissBoxValue.EndToStart -> Alignment.CenterEnd
+                                                    else -> Alignment.Center
+                                                }
+                                                val labelText = when (dismissState.dismissDirection) {
+                                                    SwipeToDismissBoxValue.StartToEnd -> "Visto"
+                                                    SwipeToDismissBoxValue.EndToStart -> "Non Visto"
+                                                    else -> ""
+                                                }
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxSize()
+                                                        .background(color)
+                                                        .padding(horizontal = 16.dp),
+                                                    contentAlignment = align
+                                                ) {
+                                                    Text(
+                                                        text = labelText,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                                        fontSize = 12.sp
+                                                    )
+                                                }
+                                            },
+                                            content = {
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .background(MaterialTheme.colorScheme.surface)
+                                                        .clickable {
+                                                            if (!isEpWatched) {
+                                                                val sortedEps = allEpisodes.sortedWith(compareBy({ it.seasonNumber }, { it.episodeNumber }))
+                                                                val clickedIndex = sortedEps.indexOfFirst { it.localId == episode.localId }
+                                                                val previousUnwatched = if (clickedIndex > 0) {
+                                                                    sortedEps.subList(0, clickedIndex).filter { it.localId !in watchedEpIds }
+                                                                } else emptyList()
+
+                                                                if (previousUnwatched.isNotEmpty()) {
+                                                                    showPreviousEpisodesDialog = episode
+                                                                } else {
+                                                                    viewModel.setEpisodeWatched(episode.localId, true, mediaId)
+                                                                }
+                                                            } else {
+                                                                viewModel.setEpisodeWatched(episode.localId, false, mediaId)
+                                                            }
+                                                        }
+                                                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.SpaceBetween
+                                                ) {
+                                                    Text(
+                                                        text = "Ep. ${episode.episodeNumber} - ${episode.name}",
+                                                        fontSize = 14.sp,
+                                                        modifier = Modifier.weight(1f)
+                                                    )
+                                                    Checkbox(
+                                                        checked = isEpWatched,
+                                                        onCheckedChange = { checked ->
+                                                            if (checked) {
+                                                                val sortedEps = allEpisodes.sortedWith(compareBy({ it.seasonNumber }, { it.episodeNumber }))
+                                                                val clickedIndex = sortedEps.indexOfFirst { it.localId == episode.localId }
+                                                                val previousUnwatched = if (clickedIndex > 0) {
+                                                                    sortedEps.subList(0, clickedIndex).filter { it.localId !in watchedEpIds }
+                                                                } else emptyList()
+
+                                                                if (previousUnwatched.isNotEmpty()) {
+                                                                    showPreviousEpisodesDialog = episode
+                                                                } else {
+                                                                    viewModel.setEpisodeWatched(episode.localId, true, mediaId)
+                                                                }
+                                                            } else {
+                                                                viewModel.setEpisodeWatched(episode.localId, false, mediaId)
+                                                            }
+                                                        }
+                                                    )
+                                                }
+                                            }
+                                        )
                                     }
                                 }
                             }
                         }
                     }
                 }
+            }
+
+            // Confirmation Dialogs
+            if (showPreviousEpisodesDialog != null) {
+                val ep = showPreviousEpisodesDialog!!
+                val sortedEps = allEpisodes.sortedWith(compareBy({ it.seasonNumber }, { it.episodeNumber }))
+                val clickedIndex = sortedEps.indexOfFirst { it.localId == ep.localId }
+                val watchedEpIds = watchedEpisodes.map { it.episodeLocalId }.toSet()
+                val previousUnwatched = if (clickedIndex > 0) {
+                    sortedEps.subList(0, clickedIndex).filter { it.localId !in watchedEpIds }
+                } else emptyList()
+
+                AlertDialog(
+                    onDismissRequest = { showPreviousEpisodesDialog = null },
+                    title = { Text("Episodi precedenti non visti") },
+                    text = { Text("Vuoi segnare come visti anche i precedenti ${previousUnwatched.size} episodi di questa serie?") },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                val ids = previousUnwatched.map { it.localId } + ep.localId
+                                viewModel.setEpisodesWatched(ids, true, mediaId)
+                                showPreviousEpisodesDialog = null
+                            }
+                        ) {
+                            Text("Sì, tutti")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = {
+                                viewModel.setEpisodeWatched(ep.localId, true, mediaId)
+                                showPreviousEpisodesDialog = null
+                            }
+                        ) {
+                            Text("Solo questo")
+                        }
+                    }
+                )
+            }
+
+            if (showPreviousSeasonsDialog != null) {
+                val s = showPreviousSeasonsDialog!!
+                val watchedEpIds = watchedEpisodes.map { it.episodeLocalId }.toSet()
+                val unwatchedEps = allEpisodes
+                    .filter { it.seasonNumber <= s.seasonNumber && it.localId !in watchedEpIds }
+                    .map { it.localId }
+
+                AlertDialog(
+                    onDismissRequest = { showPreviousSeasonsDialog = null },
+                    title = { Text("Stagioni precedenti non completate") },
+                    text = { Text("Vuoi segnare come visti tutti gli episodi delle stagioni precedenti?") },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                viewModel.setEpisodesWatched(unwatchedEps, true, mediaId)
+                                showPreviousSeasonsDialog = null
+                            }
+                        ) {
+                            Text("Sì, segna tutti")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = {
+                                viewModel.setSeasonWatched(mediaId, s.seasonNumber, true)
+                                showPreviousSeasonsDialog = null
+                            }
+                        ) {
+                            Text("Solo questa stagione")
+                        }
+                    }
+                )
             }
             }
         }
