@@ -245,13 +245,14 @@ class MediaRepository(
                 // unwatched episodes (e.g. new season added), reset status to "watching"
                 val currentState = userMediaStateDao.observeByMediaId(localId).first()
                 if (currentState?.personalStatus == "completed") {
-                    val allEps = episodeDao.getAllEpisodesForMedia(localId).first()
-                    val watchedEps = userEpisodeStateDao.getWatchedEpisodesForMedia(localId).first()
-                    if (watchedEps.size < allEps.size) {
+                    val allEpsCount = episodeDao.getEpisodesCountForMedia(localId)
+                    val watchedEpsCount = userEpisodeStateDao.getWatchedEpisodesCountForMedia(localId)
+                    if (watchedEpsCount < allEpsCount) {
                         val updatedState = currentState.copy(
                             personalStatus = "watching",
                             mediaItemRemoteId = existing?.remoteId ?: item.remoteId,
-                            updatedAt = System.currentTimeMillis()
+                            updatedAt = System.currentTimeMillis(),
+                            completedAt = null
                         )
                         userMediaStateDao.insertOrUpdate(updatedState)
                         repositoryScope.launch {
@@ -404,7 +405,7 @@ class MediaRepository(
                         personalStatus = newStatus,
                         mediaItemRemoteId = parentMedia?.remoteId ?: currentMediaState.mediaItemRemoteId,
                         updatedAt = System.currentTimeMillis(),
-                        completedAt = if (newStatus == "completed") System.currentTimeMillis() else currentMediaState.completedAt
+                        completedAt = if (newStatus == "completed") System.currentTimeMillis() else null
                     )
                 }
             }
@@ -511,7 +512,7 @@ class MediaRepository(
                         personalStatus = newStatus,
                         mediaItemRemoteId = parentMedia?.remoteId ?: currentMediaState.mediaItemRemoteId,
                         updatedAt = System.currentTimeMillis(),
-                        completedAt = if (newStatus == "completed") System.currentTimeMillis() else currentMediaState.completedAt
+                        completedAt = if (newStatus == "completed") System.currentTimeMillis() else null
                     )
                 }
             }

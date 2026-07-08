@@ -11,6 +11,10 @@ import com.fagghino.tvvault.data.repository.MediaRepository
 import com.fagghino.tvvault.ui.screens.UpcomingEpisodeItem
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -236,7 +240,7 @@ class MediaViewModel(
             val newState = currentState?.copy(
                 personalStatus = status,
                 updatedAt = System.currentTimeMillis(),
-                completedAt = if (status == "completed") System.currentTimeMillis() else currentState.completedAt,
+                completedAt = if (status == "completed") System.currentTimeMillis() else null,
                 startedAt = if (status == "watching" && currentState.startedAt == null) System.currentTimeMillis() else currentState.startedAt
             ) ?: UserMediaState(mediaItemLocalId = mediaId, personalStatus = status)
             repository.updateMediaState(newState)
@@ -277,54 +281,70 @@ class MediaViewModel(
     fun loadUpcomingEpisodes() {
         viewModelScope.launch {
             _isLoadingUpcoming.value = true
-            val result = mutableListOf<UpcomingEpisodeItem>()
             val today = LocalDate.now()
             val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
             val cutoff = today.plusDays(60) // Look 60 days ahead
 
-            // Only look at shows that are being watched or not started
-            val activeShows = repository.observeShows().first()
-            activeShows.forEach { show ->
-                try {
-                    val state = repository.observeMediaState(show.localId).first()
-                    val status = state?.personalStatus ?: "watchlist"
+            try {
+                // Use the reactive JOIN query to get shows and states in one go
+                val activeShowsWithState = repository.observeShowsWithState().first()
+                
+                // Limit concurrency to avoid TMDb API rate limits (e.g. 429 Too Many Requests)
+                val semaphore = kotlinx.coroutines.sync.Semaphore(10)
+                
+                val deferredResults = activeShowsWithState.mapNotNull { showWithState ->
+                    val status = showWithState.userMediaState?.personalStatus ?: "watchlist"
                     if (status == "watching" || status == "watchlist") {
-                        // Fetch latest season info from TMDb to get air dates
-                        show.providerId.toIntOrNull()?.let { tmdbId ->
-                            val details = repository.getTvShowDetails(tmdbId)
-                            val lastSeason = details?.numberOfSeasons ?: 0
-                            if (lastSeason > 0) {
-                                val season = repository.getSeasonWithAirDates(tmdbId, lastSeason)
-                                season?.episodes?.forEach { ep ->
-                                    val airDateStr = ep.airDate ?: return@forEach
-                                    if (airDateStr.isBlank()) return@forEach
-                                    val airDate = runCatching {
-                                        LocalDate.parse(airDateStr, formatter)
-                                    }.getOrNull() ?: return@forEach
-                                    if (airDate >= today && airDate <= cutoff) {
-                                        result.add(
-                                            UpcomingEpisodeItem(
-                                                show = show,
-                                                seasonNumber = lastSeason,
-                                                episodeNumber = ep.episodeNumber,
-                                                episodeName = ep.name,
-                                                airDate = airDate,
-                                                posterPath = show.posterPath
-                                            )
-                                        )
+                        val tmdbId = showWithState.mediaItem.providerId.toIntOrNull() ?: return@mapNotNull null
+                        
+                        kotlinx.coroutines.async {
+                            semaphore.withPermit {
+                                val episodesForShow = mutableListOf<UpcomingEpisodeItem>()
+                                try {
+                                    val details = repository.getTvShowDetails(tmdbId)
+                                    val lastSeason = details?.numberOfSeasons ?: 0
+                                    if (lastSeason > 0) {
+                                        val season = repository.getSeasonWithAirDates(tmdbId, lastSeason)
+                                        season?.episodes?.forEach { ep ->
+                                            val airDateStr = ep.airDate
+                                            if (!airDateStr.isNullOrBlank()) {
+                                                val airDate = runCatching {
+                                                    LocalDate.parse(airDateStr, formatter)
+                                                }.getOrNull()
+                                                if (airDate != null && airDate >= today && airDate <= cutoff) {
+                                                    episodesForShow.add(
+                                                        UpcomingEpisodeItem(
+                                                            show = showWithState.mediaItem,
+                                                            seasonNumber = lastSeason,
+                                                            episodeNumber = ep.episodeNumber,
+                                                            episodeName = ep.name,
+                                                            airDate = airDate,
+                                                            posterPath = showWithState.mediaItem.posterPath
+                                                        )
+                                                    )
+                                                }
+                                            }
+                                        }
                                     }
+                                } catch (e: Exception) {
+                                    // Ignore individual show errors
                                 }
+                                episodesForShow
                             }
                         }
+                    } else {
+                        null
                     }
-                } catch (e: Exception) {
-                    // Skip this show silently
                 }
+                
+                val result = deferredResults.awaitAll().flatten()
+                
+                _upcomingEpisodes.value = result.sortedBy { it.airDate }
+            } catch (e: Exception) {
+                // Handle global failure
+            } finally {
+                _isLoadingUpcoming.value = false
             }
-            _upcomingEpisodes.value = result.sortedWith(
-                compareBy({ it.airDate }, { it.show.title })
-            )
-            _isLoadingUpcoming.value = false
         }
     }
 
